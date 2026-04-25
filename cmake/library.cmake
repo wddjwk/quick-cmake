@@ -22,10 +22,8 @@ local_find_package(nlohmann_json)
 local_find_package(tl-expected)
 local_find_package(cpptrace)
 
-
-# if you dont have dbg.h, uncomment belows:
-
-# dbg-macro
-# include(FetchContent)
-# FetchContent_Declare(dbg_macro GIT_REPOSITORY https://github.com/sharkdp/dbg-macro)
-# FetchContent_MakeAvailable(dbg_macro)
+fetch_git_package(dbg_macro https://github.com/sharkdp/dbg-macro.git)
+fetch_git_package(nlohmann_json https://github.com/nlohmann/json.git v3.11.3)
+# fetch_git_package(fmt https://github.com/fmtlib/fmt.git 10.2.1)
+# fetch_git_package(tomlplusplus https://github.com/marzer/tomlplusplus.git v3.4.0)
+# fetch_git_package(magic_enum https://github.com/Neargye/magic_enum.git v0.9.5)

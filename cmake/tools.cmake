@@ -25,7 +25,7 @@ function(msg_blue)
     execute_process(COMMAND echo -en ${FG_BLUE}${ARGN}\n${COLOR_RESET})
 endfunction()
 
-# find package and specify 
+# find package and specify
 macro(local_find_package)
     # 第一个参数作为包名
     set(pkgname ${ARGV0})
@@ -65,20 +65,30 @@ macro(local_find_package)
     endif()
 endmacro()
 
-# 为target执行cppcheck
+# Run cppcheck static analysis for a target.
+# Prerequisites (set before calling this function):
+#   CPP_CHECK      - path to cppcheck executable (use find_program(CPP_CHECK cppcheck))
+#   CPP_CHECK_DIR  - output directory for reports (default: ${CMAKE_BINARY_DIR}/cppcheck_reports)
 function(run_cppcheck target)
-    if(CPP_CHECK)
-        message(STATUS "Running cppcheck on ${target}")
-        add_custom_command(
-            TARGET ${target}
-            POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E remove ${CPP_CHECK_DIR}/${target}.log
-            COMMAND
-                ${CPP_CHECK} --enable=all --suppress=missingIncludeSystem --std=c++20
-                --output-file=${CPP_CHECK_DIR}/${target}.log --force --quiet
-                --project=${CMAKE_BINARY_DIR}/compile_commands.json
-            COMMENT "Running cppcheck on ${target}")
+    if(NOT CPP_CHECK)
+        return()
     endif()
+
+    if(NOT CPP_CHECK_DIR)
+        set(CPP_CHECK_DIR ${CMAKE_BINARY_DIR}/cppcheck_reports)
+    endif()
+
+    message(STATUS "Running cppcheck on ${target}")
+    add_custom_command(
+        TARGET ${target}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CPP_CHECK_DIR}
+        COMMAND ${CMAKE_COMMAND} -E remove -f ${CPP_CHECK_DIR}/${target}.log
+        COMMAND
+            ${CPP_CHECK} --enable=all --suppress=missingIncludeSystem --std=c++20
+            --output-file=${CPP_CHECK_DIR}/${target}.log --force --quiet
+            --project=${CMAKE_BINARY_DIR}/compile_commands.json
+        COMMENT "Running cppcheck on ${target}")
 endfunction()
 
 # 普通target添加
@@ -94,4 +104,76 @@ function(add_targets GROUP_NAME SOURCES)
     endforeach()
 
     message(STATUS --${TARGETS})
+endfunction()
+
+# fetch package from git repository via FetchContent
+# Usage: fetch_git_package(name git_repo [git_tag])
+#   name    - target name (e.g., fmt → fmt::fmt)
+#   git_repo - git repository URL
+#   git_tag  - optional git tag/branch/commit (default: latest/default branch)
+function(fetch_git_package name git_repo)
+    include(FetchContent)
+
+    if(TARGET ${name}::${name})
+        msg_green("[FETCH_PKG]: ${name} (already exists)")
+        _fetch_git_package_show_info(${name})
+        return()
+    endif()
+
+    msg_yellow("[FETCHING_PKG]: ${name}")
+    msg_blue("  - Repository: ${git_repo}")
+
+    if(ARGC GREATER 2)
+        set(_tag "${ARGV2}")
+        msg_blue("  - Git Tag: ${_tag}")
+        FetchContent_Declare(
+            ${name}
+            GIT_REPOSITORY ${git_repo}
+            GIT_TAG        ${_tag}
+        )
+    else()
+        msg_blue("  - Git Tag: latest (default branch)")
+        FetchContent_Declare(
+            ${name}
+            GIT_REPOSITORY ${git_repo}
+        )
+    endif()
+
+    FetchContent_MakeAvailable(${name})
+
+    _fetch_git_package_show_info(${name})
+endfunction()
+
+# helper: show targets or variables for a fetched package
+function(_fetch_git_package_show_info name)
+    # 1) show canonical namespaced target (e.g. fmt::fmt)
+    if(TARGET ${name}::${name})
+        get_target_property(_type ${name}::${name} TYPE)
+        msg_blue("  - Target: ${name}::${name} (${_type})")
+        set(_found_target TRUE)
+    endif()
+
+    # 2) if no target at all, fallback to variable-style display
+    if(NOT _found_target)
+        set(_vars
+            ${name}_INCLUDE_DIRS
+            ${name}_INCLUDE_DIR
+            ${name}_INCLUDES
+            ${name}_LIBRARY
+            ${name}_LIBRARIES
+            ${name}_SOURCE_DIR
+            ${name}_BINARY_DIR)
+        foreach(_v ${_vars})
+            if(DEFINED ${_v} AND NOT "${${_v}}" STREQUAL "")
+                msg_blue("  - ${_v}: ${${_v}}")
+            endif()
+        endforeach()
+    endif()
+
+    # show version info if available
+    if(DEFINED ${name}_VERSION AND NOT "${${name}_VERSION}" STREQUAL "")
+        msg_blue("  - Version: ${${name}_VERSION}")
+    endif()
+
+    msg_green("[${name}] Done!")
 endfunction()
