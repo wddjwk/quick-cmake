@@ -1,6 +1,0 @@
-if(cpptrace_FOUND)
-    add_executable(demo_coro_main demo_coro_main.cpp)
-    target_compile_features(demo_coro_main PRIVATE cxx_std_20)
-    target_link_libraries(demo_coro_main cpptrace::cpptrace)
-    target_include_directories(demo_coro_main PRIVATE ${INCLUDE_DIR})
-endif()
