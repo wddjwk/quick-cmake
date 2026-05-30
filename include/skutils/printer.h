@@ -9,7 +9,11 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <memory>    // for unique_ptr, shared_ptr
+#include <optional>  // for std::optional
+#include <tuple>     // for std::tuple, tuple_size
 #include <utility>
+#include <variant>   // for std::variant
 
 #include "config.h"  // for global log_lock
 
@@ -96,8 +100,34 @@ concept PairLike = requires(T p) {
 };
 
 template <typename T>
+concept SmartPointer = requires(T p) {
+  typename T::element_type;
+  { p.get() };
+  { static_cast<bool>(p) };
+};
+
+template <typename T>
+concept OptionalLike = requires(T o) {
+  { o.has_value() } -> std::same_as<bool>;
+  { *o };
+} && !SmartPointer<T>;
+
+template <typename T>
+struct is_variant_impl : std::false_type {};
+template <typename... Ts>
+struct is_variant_impl<std::variant<Ts...>> : std::true_type {};
+template <typename T>
+concept VariantType = is_variant_impl<std::remove_cv_t<T>>::value;
+
+template <typename T>
+concept TupleLike = requires {
+  { std::tuple_size<T>::value } -> std::convertible_to<std::size_t>;
+} && !PairLike<T> && !SequentialContainer<T>;
+
+template <typename T>
 concept Printable = StreamOutable<T> || Serializable<T> || SequentialContainer<T> || MappedContainer<T> || PairLike<T>
-                    || StackLike<T> || QueueLike<T>;
+                    || StackLike<T> || QueueLike<T> || SmartPointer<T> || OptionalLike<T> || VariantType<T>
+                    || TupleLike<T> || std::is_enum_v<T>;
 
 /// MARK: Printer
 
@@ -128,6 +158,9 @@ template <QueueLike T>
   requires Printable<typename T::value_type>
 auto Queue2String(const T &c);
 
+template <TupleLike T>
+auto Tuple2String(const T &t);
+
 /// MARK: Printer Impl
 
 template <PairLike T>
@@ -157,7 +190,8 @@ auto forBasedContainer2String(const T &c) {
     ss << toString(elem) << ELEM_SEP;
   }
   std::string ret = ss.str();
-  for (int i = 0; i < strlen(ELEM_SEP); ++i) {
+  constexpr size_t sep_len = sizeof(ELEM_SEP) - 1;
+  for (size_t i = 0; i < sep_len; ++i) {
     ret.pop_back();
   }
   ret.push_back(']');
@@ -226,6 +260,20 @@ auto Queue2String(const T &c) {
   return ret;
 }
 
+template <typename T, std::size_t... Is>
+std::string tupleToStringImpl(const T &t, std::index_sequence<Is...>) {
+  std::stringstream ss;
+  ss << "(";
+  ((ss << (Is == 0 ? "" : ELEM_SEP) << toString(std::get<Is>(t))), ...);
+  ss << ")";
+  return ss.str();
+}
+
+template <TupleLike T>
+auto Tuple2String(const T &t) {
+  return tupleToStringImpl(t, std::make_index_sequence<std::tuple_size_v<T>>{});
+}
+
 template <Printable T>
 auto toString(const T &obj) -> std::string {
   if constexpr (Serializable<T>) {
@@ -241,14 +289,47 @@ auto toString(const T &obj) -> std::string {
     if constexpr (std::is_function_v<std::remove_pointer_t<T>>) {
       ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(obj)) << ">";
     } else {
-      ss << static_cast<const void *>(obj) << " => ";
-      if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>) {
-        ss << toString(*obj);
+      if (obj == nullptr) {
+        ss << "nullptr";
       } else {
-        ss << UNKNOWN_TYPE_STRING;
+        ss << static_cast<const void *>(obj) << " => ";
+        if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>) {
+          ss << toString(*obj);
+        } else {
+          ss << UNKNOWN_TYPE_STRING;
+        }
       }
     }
     return ss.str();
+  } else if constexpr (SmartPointer<T>) {
+    std::stringstream ss;
+    if (!obj) {
+      ss << "nullptr";
+    } else {
+      ss << static_cast<const void *>(obj.get()) << " => " << toString(*obj);
+    }
+    return ss.str();
+  } else if constexpr (OptionalLike<T>) {
+    if (obj.has_value()) {
+      using ValueType = std::decay_t<decltype(*obj)>;
+      if constexpr (Printable<ValueType>) {
+        return "optional(" + toString(*obj) + ")";
+      } else {
+        return "optional(" UNKNOWN_TYPE_STRING ")";
+      }
+    }
+    return "nullopt";
+  } else if constexpr (VariantType<T>) {
+    return std::visit(
+      [](const auto &val) -> std::string {
+        using V = std::decay_t<decltype(val)>;
+        if constexpr (Printable<V>) {
+          return "variant(" + toString(val) + ")";
+        } else {
+          return "variant(" UNKNOWN_TYPE_STRING ")";
+        }
+      },
+      obj);
   } else if constexpr (StreamOutable<T>) {
     std::stringstream ss;
     ss << obj;
@@ -259,10 +340,14 @@ auto toString(const T &obj) -> std::string {
     return MappedContainer2String(obj);
   } else if constexpr (PairLike<T>) {
     return Pair2String(obj);
+  } else if constexpr (TupleLike<T>) {
+    return Tuple2String(obj);
   } else if constexpr (StackLike<T>) {
     return Stack2String(obj);
   } else if constexpr (QueueLike<T>) {
     return Queue2String(obj);
+  } else if constexpr (std::is_enum_v<T>) {
+    return "enum(" + std::to_string(static_cast<std::underlying_type_t<T>>(obj)) + ")";
   } else {
     GUARD_LOG;
     std::cerr << ANSI_RED_BG << "Isn't Printable\n" << ANSI_CLEAR;
@@ -387,9 +472,34 @@ struct PairLike<
                       && std::is_convertible_v<decltype(std::get<1>(std::declval<T>())), typename T::second_type>>>
   : std::true_type {};
 
+template <typename T, typename = void>
+struct SmartPointer : std::false_type {};
+template <typename T>
+struct SmartPointer<T, std::void_t<typename T::element_type, decltype(std::declval<T>().get()),
+                                   decltype(static_cast<bool>(std::declval<T>()))>> : std::true_type {};
+
+template <typename T, typename = void>
+struct OptionalLike : std::false_type {};
+template <typename T>
+struct OptionalLike<T, std::void_t<decltype(std::declval<T>().has_value()), decltype(*std::declval<T>()),
+                                   std::enable_if_t<!SmartPointer<T>::value>>> : std::true_type {};
+
+template <typename T>
+struct IsVariant : std::false_type {};
+template <typename... Ts>
+struct IsVariant<std::variant<Ts...>> : std::true_type {};
+
+template <typename T, typename = void>
+struct TupleLike : std::false_type {};
+template <typename T>
+struct TupleLike<T, std::void_t<decltype(std::tuple_size<T>::value),
+                                std::enable_if_t<!PairLike<T>::value && !SequentialContainer<T>::value>>>
+  : std::true_type {};
+
 template <typename T>
 struct Printable : std::disjunction<StreamOutable<T>, Serializable<T>, SequentialContainer<T>, MappedContainer<T>,
-                                    StackLike<T>, QueueLike<T>, PairLike<T>> {};
+                                    StackLike<T>, QueueLike<T>, PairLike<T>, SmartPointer<T>, OptionalLike<T>,
+                                    IsVariant<std::remove_cv_t<T>>, TupleLike<T>, std::is_enum<T>> {};
 
 //* enable_if 作为函数的参数，来限制函数模板选择
 template <typename T>
@@ -419,7 +529,8 @@ std::string forBasedContainer2String(const T &c) {
     ss << toString(elem) << ELEM_SEP;
   }
   std::string ret = ss.str();
-  for (int i = 0; i < strlen(ELEM_SEP); ++i) {
+  constexpr size_t sep_len = sizeof(ELEM_SEP) - 1;
+  for (size_t i = 0; i < sep_len; ++i) {
     ret.pop_back();
   }
   ret.push_back(']');
@@ -487,6 +598,20 @@ auto Queue2String(const T &c)
   return ret;
 }
 
+template <typename T, std::size_t... Is>
+std::string tupleToStringImpl(const T &t, std::index_sequence<Is...>) {
+  std::stringstream ss;
+  ss << "(";
+  ((ss << (Is == 0 ? "" : ELEM_SEP) << toString(std::get<Is>(t))), ...);
+  ss << ")";
+  return ss.str();
+}
+
+template <typename T>
+auto Tuple2String(const T &t) -> std::enable_if_t<TupleLike<T>::value, std::string> {
+  return tupleToStringImpl(t, std::make_index_sequence<std::tuple_size_v<T>>{});
+}
+
 template <typename T>
 auto toString(const T &obj) -> std::enable_if_t<Printable<T>::value, std::string> {
   if constexpr (Serializable<T>::value) {
@@ -502,14 +627,47 @@ auto toString(const T &obj) -> std::enable_if_t<Printable<T>::value, std::string
     if constexpr (std::is_function_v<std::remove_pointer_t<T>>) {
       ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(obj)) << ">";
     } else {
-      ss << static_cast<const void *>(obj) << " => ";
-      if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>::value) {
-        ss << toString(*obj);
+      if (obj == nullptr) {
+        ss << "nullptr";
       } else {
-        ss << UNKNOWN_TYPE_STRING;
+        ss << static_cast<const void *>(obj) << " => ";
+        if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>::value) {
+          ss << toString(*obj);
+        } else {
+          ss << UNKNOWN_TYPE_STRING;
+        }
       }
     }
     return ss.str();
+  } else if constexpr (SmartPointer<T>::value) {
+    std::stringstream ss;
+    if (!obj) {
+      ss << "nullptr";
+    } else {
+      ss << static_cast<const void *>(obj.get()) << " => " << toString(*obj);
+    }
+    return ss.str();
+  } else if constexpr (OptionalLike<T>::value) {
+    if (obj.has_value()) {
+      using ValueType = std::decay_t<decltype(*obj)>;
+      if constexpr (Printable<ValueType>::value) {
+        return "optional(" + toString(*obj) + ")";
+      } else {
+        return "optional(" UNKNOWN_TYPE_STRING ")";
+      }
+    }
+    return "nullopt";
+  } else if constexpr (IsVariant<std::remove_cv_t<T>>::value) {
+    return std::visit(
+      [](const auto &val) -> std::string {
+        using V = std::decay_t<decltype(val)>;
+        if constexpr (Printable<V>::value) {
+          return "variant(" + toString(val) + ")";
+        } else {
+          return "variant(" UNKNOWN_TYPE_STRING ")";
+        }
+      },
+      obj);
   } else if constexpr (StreamOutable<T>::value) {
     std::stringstream ss;
     ss << obj;
@@ -520,10 +678,14 @@ auto toString(const T &obj) -> std::enable_if_t<Printable<T>::value, std::string
     return MappedContainer2String(obj);
   } else if constexpr (PairLike<T>::value) {
     return Pair2String(obj);
+  } else if constexpr (TupleLike<T>::value) {
+    return Tuple2String(obj);
   } else if constexpr (StackLike<T>::value) {
     return Stack2String(obj);
   } else if constexpr (QueueLike<T>::value) {
     return Queue2String(obj);
+  } else if constexpr (std::is_enum_v<T>) {
+    return "enum(" + std::to_string(static_cast<std::underlying_type_t<T>>(obj)) + ")";
   } else {
     GUARD_LOG;
     std::cerr << ANSI_RED_BG << "Isn't Printable\n" << ANSI_CLEAR;
@@ -555,8 +717,15 @@ std::string format(std::string_view fmt, Args... args) {
   std::string fmtStr(fmt);
   if constexpr (!sizeof...(args)) {
     return fmtStr;
-  } else {  //! must has else and constexpr, or you can remove it to see what will happend.
-    return ((fmtStr.replace(fmtStr.find("{}"), 2, toString(args))), ...);
+  } else {
+    auto replace_next = [&fmtStr](const std::string &val) {
+      auto pos = fmtStr.find("{}");
+      if (pos != std::string::npos) {
+        fmtStr.replace(pos, 2, val);
+      }
+    };
+    (replace_next(toString(args)), ...);
+    return fmtStr;
   }
 }
 
@@ -566,9 +735,14 @@ std::string colorful_format(std::string_view fmt, Args... args) {
   if constexpr (!sizeof...(args)) {
     return ANSI_TEMPLATE_COLOR + fmtStr + ANSI_CLEAR;
   } else {
-    return ANSI_TEMPLATE_COLOR
-           + ((fmtStr.replace(fmtStr.find("{}"), 2, ANSI_KEY_COLOR + toString(args) + ANSI_TEMPLATE_COLOR)), ...)
-           + ANSI_CLEAR;
+    auto replace_next = [&fmtStr](const std::string &val) {
+      auto pos = fmtStr.find("{}");
+      if (pos != std::string::npos) {
+        fmtStr.replace(pos, 2, ANSI_KEY_COLOR + val + ANSI_TEMPLATE_COLOR);
+      }
+    };
+    (replace_next(toString(args)), ...);
+    return ANSI_TEMPLATE_COLOR + fmtStr + ANSI_CLEAR;
   }
 }
 
