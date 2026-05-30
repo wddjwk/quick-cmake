@@ -38,3 +38,10 @@ cc_binary(
     "test_gtest_stringutils",
     "test_gtest_threadpool",
 ]]
+
+# ─── header-only skutils test (depends on packaged artifact) ───
+cc_binary(
+    name = "test_skutils_headeronly",
+    srcs = ["test_skutils_headeronly.cpp"],
+    deps = ["//include:skutils_single"],
+)

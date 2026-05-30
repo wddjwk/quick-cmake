@@ -8,6 +8,33 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# ─── Auto-generated single-header library ───
+_MERGE_SRCS = [
+    "skutils/noncopyable.h",
+    "skutils/spinlock.h",
+    "skutils/config.h",
+    "skutils/string_utils.h",
+    "skutils/time_utils.h",
+    "skutils/printer.h",
+    "skutils/logger.h",
+]
+
+genrule(
+    name = "gen_skutils_h",
+    srcs = _MERGE_SRCS,
+    outs = ["header_only/skutils.h"],
+    cmd = "python3 $(location //scripts:merge_skutils.py) $@ " +
+          " ".join(["$(location " + s + ")" for s in _MERGE_SRCS]),
+    tools = ["//scripts:merge_skutils.py"],
+)
+
+cc_library(
+    name = "skutils_single",
+    hdrs = [":gen_skutils_h"],
+    strip_include_prefix = "header_only",
+    visibility = ["//visibility:public"],
+)
+
 # Vendored dbg-macro (header-only)
 cc_library(
     name = "dbg",
