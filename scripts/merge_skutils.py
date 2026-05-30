@@ -31,7 +31,7 @@ def parse_header(filepath):
     - Removes #include "..." (internal project includes)
     - Preserves everything else as body
     """
-    with open(filepath) as f:
+    with open(filepath, encoding='utf-8') as f:
         lines = f.readlines()
 
     std_includes = []
