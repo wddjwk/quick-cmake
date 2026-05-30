@@ -8,8 +8,6 @@ add_subdirectory(protobuf)
 add_subdirectory(sktest)
 add_subdirectory(skbench)
 
-add_subdirectory(aio-coro)
-
 add_subdirectory(event_manager)
 
 add_subdirectory(coro)
