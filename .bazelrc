@@ -11,3 +11,8 @@ build --action_env=CXX
 
 # Show test output on failure
 test --test_output=errors
+
+# ─── GCC/MinGW toolchain on Windows ───
+# Usage: bazel build --config=gcc //target
+build:gcc --extra_toolchains=//toolchains/gcc:gcc_toolchain
+build:gcc --action_env=PATH

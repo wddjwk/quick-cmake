@@ -34,5 +34,9 @@ bazel_dep(name = "liburing", version = "2.14")
 non_module_deps = use_extension("//:extensions.bzl", "non_module_deps")
 use_repo(non_module_deps, "concurrencpp")
 
+# ─── GCC/MinGW toolchain (for --config=gcc on Windows) ───
+gcc_toolchain_ext = use_extension("//toolchains/gcc:extensions.bzl", "gcc_toolchain")
+use_repo(gcc_toolchain_ext, "gcc_toolchain")
+
 # NOTE: protobuf and tbb are used as system libraries (not managed by Bazel).
 #       See //third_party/protobuf and //third_party/tbb.
