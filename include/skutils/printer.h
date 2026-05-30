@@ -1,7 +1,8 @@
 #ifndef SK_UTILS_PRINTER_H
 #define SK_UTILS_PRINTER_H
 
-#include <cstring>  // for strlen()
+#include <cstdint>   // for uintptr_t
+#include <cstring>   // for strlen()
 #include <iostream>
 #include <ostream>
 #include <sstream>
@@ -233,15 +234,19 @@ auto toString(const T &obj) -> std::string {
     return obj ? "True" : "False";
   } else if constexpr (std::is_function_v<T>) {
     std::stringstream ss;
-    ss << (unsigned char *)obj << "()";
+    ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(&obj)) << ">";
     return ss.str();
   } else if constexpr (std::is_pointer_v<T> && !std::is_convertible_v<const char *, T>) {
     std::stringstream ss;
-    ss << (unsigned char *)obj;
-    if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>) {
-      ss << "=>" << toString(*obj);
+    if constexpr (std::is_function_v<std::remove_pointer_t<T>>) {
+      ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(obj)) << ">";
     } else {
-      ss << "=>" << UNKNOWN_TYPE_STRING;
+      ss << static_cast<const void *>(obj) << " => ";
+      if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>) {
+        ss << toString(*obj);
+      } else {
+        ss << UNKNOWN_TYPE_STRING;
+      }
     }
     return ss.str();
   } else if constexpr (StreamOutable<T>) {
@@ -490,15 +495,19 @@ auto toString(const T &obj) -> std::enable_if_t<Printable<T>::value, std::string
     return obj ? "True"s : "False"s;
   } else if constexpr (std::is_function_v<T>) {
     std::stringstream ss;
-    ss << (unsigned char *)obj << "()";
+    ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(&obj)) << ">";
     return ss.str();
   } else if constexpr (std::is_pointer_v<T> && !std::is_convertible_v<const char *, T>) {
     std::stringstream ss;
-    ss << (unsigned char *)obj;
-    if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>::value) {
-      ss << "=>" << toString(*obj);
+    if constexpr (std::is_function_v<std::remove_pointer_t<T>>) {
+      ss << "<func@" << reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(obj)) << ">";
     } else {
-      ss << "=>" << UNKNOWN_TYPE_STRING;
+      ss << static_cast<const void *>(obj) << " => ";
+      if constexpr (Printable<std::remove_reference_t<decltype(*obj)>>::value) {
+        ss << toString(*obj);
+      } else {
+        ss << UNKNOWN_TYPE_STRING;
+      }
     }
     return ss.str();
   } else if constexpr (StreamOutable<T>::value) {
