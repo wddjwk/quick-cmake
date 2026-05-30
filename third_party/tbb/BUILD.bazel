@@ -1,0 +1,12 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# System TBB wrapper — example of using a system-installed library in Bazel.
+#
+# This wraps the system-installed Intel TBB (Threading Building Blocks).
+# Headers are found via the compiler's default system include paths.
+
+cc_library(
+    name = "tbb",
+    linkopts = ["-ltbb"],
+    visibility = ["//visibility:public"],
+)

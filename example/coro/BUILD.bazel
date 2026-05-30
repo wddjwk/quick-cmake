@@ -1,0 +1,72 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+# ─── Pure coroutine examples (no external deps) ───
+cc_binary(
+    name = "demo_coro_basics",
+    srcs = ["demo_coro_basics.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "demo_coro_task_chain",
+    srcs = ["demo_coro_task_chain.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "demo_coro_sync_await",
+    srcs = ["demo_coro_sync_await.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "demo_coro_callback_hell",
+    srcs = ["demo_coro_callback_hell.cpp"],
+    deps = ["//include:skutils"],
+)
+
+# ─── Asio coroutine example (standalone asio from BCR) ───
+cc_binary(
+    name = "demo_coro_asio",
+    srcs = ["demo_coro_asio.cpp"],
+    deps = [
+        "//include:skutils",
+        "@asio",
+    ],
+)
+
+# ─── concurrencpp comparison ───
+cc_binary(
+    name = "demo_coro_concurrencpp",
+    srcs = ["demo_coro_concurrencpp.cpp"],
+    deps = [
+        "//include:skutils",
+        "@concurrencpp",
+    ],
+)
+
+# ─── io_uring example (Linux only) ───
+genrule(
+    name = "coro_config_h",
+    outs = ["config.h"],
+    cmd = """echo '#ifndef CORO_CONFIG_H
+#define CORO_CONFIG_H
+#define SK_HAS_IO_URING 1
+#endif' > $@""",
+)
+
+cc_library(
+    name = "coro_config",
+    hdrs = [":coro_config_h"],
+    includes = ["."],
+)
+
+cc_binary(
+    name = "demo_coro_io_uring",
+    srcs = ["demo_coro_io_uring.cpp"],
+    deps = [
+        ":coro_config",
+        "//include:skutils",
+        "@liburing",
+    ],
+)

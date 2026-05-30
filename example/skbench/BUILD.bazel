@@ -1,0 +1,10 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "bench_threadpool",
+    srcs = ["bench_threadpool.cpp"],
+    deps = [
+        "//include:skutils",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

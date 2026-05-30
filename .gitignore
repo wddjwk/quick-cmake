@@ -16,3 +16,10 @@ build/*
 *.so
 
 trash/*
+
+# Bazel
+bazel-*
+external
+MODULE.bazel.lock
+
+compile_commands.json

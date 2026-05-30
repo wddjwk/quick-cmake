@@ -1,0 +1,26 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "demo_asio_server",
+    srcs = ["demo_asio_server.cpp"],
+    deps = ["@boost.asio"],
+)
+
+cc_binary(
+    name = "demo_asio_client",
+    srcs = ["demo_asio_client.cpp"],
+    deps = ["@boost.asio"],
+)
+
+cc_binary(
+    name = "demo_boost_graph",
+    srcs = ["demo_boost_graph.cpp"],
+    deps = ["@boost.graph"],
+)
+
+cc_binary(
+    name = "demo_boost_interprocess_shm",
+    srcs = ["demo_boost_interprocess_shm.cpp"],
+    deps = ["@boost.interprocess"],
+    linkopts = ["-lrt", "-lpthread"],
+)

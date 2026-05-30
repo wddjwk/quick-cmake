@@ -1,0 +1,29 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "combine",
+    srcs = ["combine_files.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "ducpp",
+    srcs = ["ducpp.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "moderntools",
+    srcs = ["moderntools.cpp"],
+    deps = [
+        "//include:skutils",
+        "@curl",
+        "@nlohmann_json//:json",
+    ],
+)
+
+cc_binary(
+    name = "stdtalker",
+    srcs = ["stdtalker.cpp"],
+    deps = ["//include:skutils"],
+)

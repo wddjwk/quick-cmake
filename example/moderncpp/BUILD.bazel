@@ -1,0 +1,28 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "demo_coroutine",
+    srcs = ["demo_coroutine.cpp"],
+)
+
+cc_binary(
+    name = "demo_filesystem",
+    srcs = ["demo_filesystem.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "demo_chrono",
+    srcs = ["demo_chrono.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "bm_paral_algo",
+    srcs = ["bm_paral_algo.cpp"],
+    deps = [
+        "//include:skutils",
+        "//third_party/tbb",
+        "@google_benchmark//:benchmark_main",
+    ],
+)

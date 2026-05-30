@@ -1,0 +1,17 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# Header-only utility library
+cc_library(
+    name = "skutils",
+    hdrs = glob(["skutils/**/*.h"]),
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+# Vendored dbg-macro (header-only)
+cc_library(
+    name = "dbg",
+    hdrs = ["dbg.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)

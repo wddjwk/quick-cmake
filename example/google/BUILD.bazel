@@ -1,0 +1,26 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "demo_gtest",
+    srcs = ["demo_gtest.cpp"],
+    deps = [
+        "//include:dbg",
+        "//include:skutils",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "demo_gmock",
+    srcs = ["demo_gmock.cpp"],
+    deps = [
+        "@googletest//:gtest_main",
+        "@googletest//:gtest",
+    ],
+)
+
+cc_binary(
+    name = "demo_benchmark",
+    srcs = ["demo_benchmark.cpp"],
+    deps = ["@google_benchmark//:benchmark_main"],
+)

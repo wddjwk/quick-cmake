@@ -1,0 +1,12 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# System protobuf wrapper — example of using a system-installed library in Bazel.
+#
+# This wraps the system-installed protobuf (libprotobuf + protoc).
+# Headers are found via the compiler's default system include paths.
+
+cc_library(
+    name = "protobuf",
+    linkopts = ["-lprotobuf"],
+    visibility = ["//visibility:public"],
+)

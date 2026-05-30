@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//third_party/protobuf:defs.bzl", "proto_cc_library")
+
+proto_cc_library(
+    name = "addressbook_proto",
+    proto = "AddressBook.proto",
+)
+
+cc_binary(
+    name = "demo_protobuf",
+    srcs = ["demo_protobuf.cpp"],
+    deps = [
+        ":addressbook_proto",
+        "//include:skutils",
+    ],
+)

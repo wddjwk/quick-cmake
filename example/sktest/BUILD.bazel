@@ -1,0 +1,40 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+
+# ─── sktest tests (custom test framework) ───
+[cc_binary(
+    name = name,
+    srcs = [name + ".cpp"],
+    deps = ["//include:skutils"],
+) for name in [
+    "test_sktest_argparser",
+    "test_sktest_printer",
+    "test_sktest_randomutils",
+    "test_sktest_timeutils",
+]]
+
+# ─── sktest container tests ───
+cc_binary(
+    name = "test_sktest_topkqueue",
+    srcs = ["containers/test_sktest_topkqueue.cpp"],
+    deps = ["//include:skutils"],
+)
+
+cc_binary(
+    name = "test_sktest_graph",
+    srcs = ["containers/test_sktest_graph.cpp"],
+    deps = ["//include:skutils"],
+)
+
+# ─── gtest-based tests ───
+[cc_test(
+    name = name,
+    srcs = [name + ".cpp"],
+    deps = [
+        "//include:skutils",
+        "@googletest//:gtest_main",
+    ],
+) for name in [
+    "test_gtest_argparser",
+    "test_gtest_stringutils",
+    "test_gtest_threadpool",
+]]

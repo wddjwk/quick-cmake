@@ -1,0 +1,13 @@
+# C++ standard
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+
+# Suppress warnings (match CMake -w flag)
+build --cxxopt=-w
+
+# Use C++ toolchain
+build --action_env=CC
+build --action_env=CXX
+
+# Show test output on failure
+test --test_output=errors
