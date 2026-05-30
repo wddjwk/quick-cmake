@@ -30,3 +30,8 @@ if(GTest_FOUND)
         add_test(NAME ${G_CTEST_NAME} COMMAND ${GTEST_TARGET})
     endforeach()
 endif()
+
+# header-only single-file library test (depends on auto-generated skutils.h)
+add_executable(test_skutils_headeronly test_skutils_headeronly.cpp)
+target_link_libraries(test_skutils_headeronly PRIVATE skutils_single)
+add_test(NAME TEST_SKUTILS_HEADERONLY COMMAND test_skutils_headeronly)

@@ -21,6 +21,34 @@ endif()
 # 安装头文件
 install(DIRECTORY ${INCLUDE_DIR}/skutils DESTINATION include)
 
+# 自动生成单文件头（header-only打包产物）
+set(SKUTILS_SINGLE_HEADER ${INCLUDE_DIR}/header_only/skutils.h)
+set(MERGE_SCRIPT ${CMAKE_SOURCE_DIR}/scripts/merge_skutils.py)
+set(SKUTILS_MERGE_INPUTS
+    ${INCLUDE_DIR}/skutils/noncopyable.h
+    ${INCLUDE_DIR}/skutils/spinlock.h
+    ${INCLUDE_DIR}/skutils/config.h
+    ${INCLUDE_DIR}/skutils/string_utils.h
+    ${INCLUDE_DIR}/skutils/time_utils.h
+    ${INCLUDE_DIR}/skutils/printer.h
+    ${INCLUDE_DIR}/skutils/logger.h
+)
+
+add_custom_command(
+    OUTPUT ${SKUTILS_SINGLE_HEADER}
+    COMMAND python3 ${MERGE_SCRIPT} ${SKUTILS_SINGLE_HEADER} ${SKUTILS_MERGE_INPUTS}
+    DEPENDS ${MERGE_SCRIPT} ${SKUTILS_MERGE_INPUTS}
+    COMMENT "Generating single-header skutils.h -> include/header_only/skutils.h"
+)
+add_custom_target(gen_skutils_h DEPENDS ${SKUTILS_SINGLE_HEADER})
+
+# INTERFACE library for consumers
+add_library(skutils_single INTERFACE)
+add_dependencies(skutils_single gen_skutils_h)
+target_include_directories(skutils_single INTERFACE ${INCLUDE_DIR}/header_only)
+
+install(FILES ${SKUTILS_SINGLE_HEADER} DESTINATION include)
+
 include(${CMAKE_SOURCE_DIR}/cmake/tools.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/library.cmake)
 
