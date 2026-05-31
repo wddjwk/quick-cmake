@@ -4,12 +4,14 @@ cc_binary(
     name = "demo_asio_server",
     srcs = ["demo_asio_server.cpp"],
     deps = ["@boost.asio"],
+    tags = ["requires-openssl"],
 )
 
 cc_binary(
     name = "demo_asio_client",
     srcs = ["demo_asio_client.cpp"],
     deps = ["@boost.asio"],
+    tags = ["requires-openssl"],
 )
 
 cc_binary(
@@ -21,6 +23,13 @@ cc_binary(
 cc_binary(
     name = "demo_boost_interprocess_shm",
     srcs = ["demo_boost_interprocess_shm.cpp"],
-    deps = ["@boost.interprocess"],
-    linkopts = ["-lrt", "-lpthread"],
+    deps = [
+        "//include:dbg",
+        "//include:skutils",
+        "@boost.interprocess",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-lrt", "-lpthread"],
+        "//conditions:default": [],
+    }),
 )

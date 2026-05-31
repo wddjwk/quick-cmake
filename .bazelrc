@@ -12,7 +12,10 @@ build --action_env=CXX
 # Show test output on failure
 test --test_output=errors
 
-# ─── GCC/MinGW toolchain on Windows ───
-# Usage: bazel build --config=gcc //target
-build:gcc --extra_toolchains=//toolchains/gcc:gcc_toolchain
-build:gcc --action_env=PATH
+# ─── GCC/MinGW toolchain on Windows (MSYS2) ───
+# Usage: bazel build --config=msys2 //target
+build:msys2 --extra_toolchains=//toolchains/gcc:gcc_toolchain
+build:msys2 --action_env=PATH
+build:msys2 --define=toolchain=msys2
+build:msys2 --@boost.context//:win-compile=win-mingw
+build:msys2 --build_tag_filters=-requires-openssl

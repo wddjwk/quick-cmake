@@ -12,11 +12,24 @@ def proto_cc_library(name, proto, deps = [], **kwargs):
     """
     stem = proto.rsplit(".", 1)[0]
 
+    # Shared protoc arguments
+    _args = "--cpp_out=$(RULEDIR) --proto_path=$$(dirname $(location {})) $(location {})".format(proto, proto)
+
+    # Under --config=msys2, prefer the MinGW protoc so that the generated code
+    # matches the MinGW protobuf headers; fall back to PATH protoc otherwise.
+    _msys2_cmd = (
+        "P=protoc; for d in /mingw64 /ucrt64 /mingw32; do " +
+        "[ -x $$d/bin/protoc ] && P=$$d/bin/protoc && break; done; $$P " + _args
+    )
+
     native.genrule(
         name = name + "_gen",
         srcs = [proto],
         outs = [stem + ".pb.h", stem + ".pb.cc"],
-        cmd = "protoc --cpp_out=$(RULEDIR) --proto_path=$$(dirname $(location {})) $(location {})".format(proto, proto),
+        cmd = select({
+            "//toolchains/gcc:msys2": _msys2_cmd,
+            "//conditions:default": "protoc " + _args,
+        }),
     )
 
     cc_library(

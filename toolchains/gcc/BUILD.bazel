@@ -2,7 +2,7 @@ load("@rules_cc//cc:defs.bzl", "cc_toolchain")
 load("//toolchains/gcc:toolchain_config.bzl", "gcc_toolchain_config")
 
 # GCC/MinGW C++ toolchain for Windows.
-# Activated via: bazel build --config=gcc //target
+# Activated via: bazel build --config=msys2 //target
 
 gcc_toolchain_config(name = "gcc_config")
 
@@ -23,4 +23,11 @@ toolchain(
     name = "gcc_toolchain",
     toolchain = ":gcc_cc_toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# Config setting for --config=msys2 (set via --define=toolchain=msys2)
+config_setting(
+    name = "msys2",
+    define_values = {"toolchain": "msys2"},
+    visibility = ["//visibility:public"],
 )

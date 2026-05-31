@@ -33,6 +33,7 @@ cc_binary(
         "//include:skutils",
         "@asio",
     ],
+    tags = ["requires-openssl"],
 )
 
 # ─── concurrencpp comparison ───
@@ -53,12 +54,14 @@ genrule(
 #define CORO_CONFIG_H
 #define SK_HAS_IO_URING 1
 #endif' > $@""",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 cc_library(
     name = "coro_config",
     hdrs = [":coro_config_h"],
     includes = ["."],
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 cc_binary(
@@ -69,4 +72,5 @@ cc_binary(
         "//include:skutils",
         "@liburing",
     ],
+    target_compatible_with = ["@platforms//os:linux"],
 )

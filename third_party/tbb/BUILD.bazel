@@ -7,6 +7,6 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "tbb",
-    linkopts = ["-ltbb"],
+    linkopts = ["-ltbb12"],
     visibility = ["//visibility:public"],
 )

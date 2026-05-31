@@ -47,6 +47,49 @@ static const char *drop[]={
     " /O1 "," /O2 "," /Od "," /Ox "," /Oi "," /Os "," /Ot ",
     " /Gy "," /Gw "," /Gd "," /Gr "," /Gz ",
     " /sdl "," /RTC1 "," /FC ",NULL};
+static void pp(char *cmd){
+    char *p=cmd;
+    while((p=strstr(p," @"))!=NULL){
+        char fn[4096];char *s=p+2,*e=s;
+        while(*e&&*e!=' ')e++;
+        int n=(int)(e-s);
+        if(n<=0||n>=(int)sizeof(fn)){p=e;continue;}
+        memcpy(fn,s,n);fn[n]='\\0';
+        FILE *fi=fopen(fn,"r");
+        if(!fi){p=e;continue;}
+        static char ob[262144];int ol=0;char ln[8192];
+        while(fgets(ln,sizeof(ln),fi)){
+            int l=(int)strlen(ln);
+            while(l>0&&(ln[l-1]=='\\n'||ln[l-1]=='\\r'))ln[--l]='\\0';
+            if(!l)continue;
+            if(ln[0]=='/'&&(ln[1]=='D'||ln[1]=='I')){ln[0]='-';}
+            else if(strncmp(ln,"/FI",3)==0){
+                char t[8192];snprintf(t,sizeof(t),"-include %s",ln+3);strcpy(ln,t);}
+            else if(strncmp(ln,"/std:",5)==0){
+                char t[8192];snprintf(t,sizeof(t),"-std=%s",ln+5);strcpy(ln,t);}
+            else if(strncmp(ln,"-DEFAULTLIB:",12)==0||strncmp(ln,"/DEFAULTLIB:",12)==0){
+                char *nm=ln+12;int nl=(int)strlen(nm);
+                if(nl>4&&strcmp(nm+nl-4,".lib")==0)nl-=4;
+                char t[256];snprintf(t,sizeof(t),"-l%.*s",nl,nm);strcpy(ln,t);}
+            else if(strcmp(ln,"/EHsc")==0||strcmp(ln,"/EHs")==0||strcmp(ln,"/EHa")==0||
+                strcmp(ln,"/nologo")==0||strcmp(ln,"/MD")==0||strcmp(ln,"/MDd")==0||
+                strcmp(ln,"/MT")==0||strcmp(ln,"/MTd")==0||strcmp(ln,"/Zi")==0||
+                strcmp(ln,"/Z7")==0||strcmp(ln,"/FS")==0||strcmp(ln,"/bigobj")==0||
+                strcmp(ln,"/utf-8")==0||strcmp(ln,"/GR")==0||strcmp(ln,"/GR-")==0||
+                strcmp(ln,"/GL")==0||strcmp(ln,"/sdl")==0||strcmp(ln,"/RTC1")==0||
+                strcmp(ln,"/FC")==0||strcmp(ln,"/Gy")==0||strcmp(ln,"/Gw")==0||
+                (ln[0]=='/'&&ln[1]=='W')||(ln[0]=='/'&&ln[1]=='O')||
+                strncmp(ln,"/Zc:",4)==0||strncmp(ln,"/wd",3)==0||
+                strncmp(ln,"/guard:",7)==0||
+                strcmp(ln,"/Gd")==0||strcmp(ln,"/Gr")==0||strcmp(ln,"/Gz")==0)
+                continue;
+            ol+=snprintf(ob+ol,sizeof(ob)-ol,"%s\\n",ln);
+        }
+        fclose(fi);
+        fi=fopen(fn,"w");
+        if(fi){fwrite(ob,1,ol,fi);fclose(fi);}
+        p=e;
+    }}
 int main(void){
     char *raw=GetCommandLineA(),*a=raw;
     if(*a=='"'){a++;while(*a&&*a!='"')a++;if(*a)a++;}
@@ -55,9 +98,10 @@ int main(void){
     static char c[65536];const char **f;
     int n=snprintf(c,sizeof(c),"\\"__REAL_COMPILER__\\" %s ",a);
     if(n<0||(size_t)n>=sizeof(c))return 1;
-    sr(c," /D"," -D");sr(c," /I"," -I");sr(c," /std:"," -std=");
+    sr(c," /D"," -D");sr(c," /I"," -I");sr(c," /std:"," -std=");sr(c," /FI"," -include ");
     for(f=drop;*f;f++)sr(c,*f," ");
     sp(c," /wd");sp(c," /Zc:");sp(c," /guard:");
+    pp(c);
     {STARTUPINFOA si;PROCESS_INFORMATION pi;
     memset(&si,0,sizeof(si));si.cb=sizeof(si);
     si.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
