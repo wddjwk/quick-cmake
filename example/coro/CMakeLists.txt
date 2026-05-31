@@ -33,6 +33,9 @@ if(NOT TARGET asio::asio)
     )
     find_package(Threads REQUIRED)
     target_link_libraries(asio_asio INTERFACE Threads::Threads)
+    if(WIN32)
+        target_link_libraries(asio_asio INTERFACE ws2_32 mswsock)
+    endif()
 endif()
 
 # ── concurrencpp — a modern C++20 coroutine library for comparison ──
