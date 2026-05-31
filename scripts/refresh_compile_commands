@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+main() {
+    local usage="用法: refresh-compile-commands [-c config]... [-o opt]... [--middle-effort|--max-effort] [-d] [-m] [-w workspace] [-R k=v]... [target ...]
+  target           bazel目标, 默认 //...
+  -c config        bazel --config=xxx, 可多次指定
+  -o opt           透传任意bazel选项, 如 -o '--compilation_mode=opt'
+  --middle-effort  补全项目本地孤儿header(同目录无source的纯头目录),稍慢,文件略大
+  --max-effort     同上,且补全external/bazel-out下的孤儿header(可跳转第三方库源码),慢,文件可达~100MB
+                   默认不做孤儿补全,只用bazel aquery结果,最快,文件最小
+  -d               debug: 打印孤儿header和让贤header明细
+  -m               增量合并: 新条目覆盖同名旧条目, 保留其余, 清理源文件已不存在的
+  -w dir           指定workspace目录, 默认当前目录
+  -R k=v           替换编译参数中的k为v(可多次, v为空则删除)
+示例:
+  refresh-compile-commands                        # 默认模式,最快
+  refresh-compile-commands //app/... //demo/...   # 多目标
+  refresh-compile-commands --middle-effort        # 发现本项目某些header解析不了时使用
+  refresh-compile-commands --max-effort           # 还想跳转到external第三方库源码时使用
+  refresh-compile-commands -d --middle-effort     # 打印header明细
+  refresh-compile-commands -m //demo/fastdds:fastdds_publisher  # 增量追加依赖
+  refresh-compile-commands -R '-fno-canonical-system-headers'=''  # 删除特定flag"
+
+    local -a configs targets replacements bazel_opts raw_args
+    local effort=0 merge=false debug=false ws="."
+    # 先剥离长选项 --middle-effort / --max-effort, 余下交给 getopts
+    for a in "$@"; do
+        case "$a" in
+            --middle-effort) effort=1 ;;
+            --max-effort) effort=2 ;;
+            *) raw_args+=("$a") ;;
+        esac
+    done
+    set -- "${raw_args[@]}"
+    OPTIND=1
+    while getopts "c:o:dmw:R:h" opt; do
+        case "$opt" in
+            c) configs+=(--config="$OPTARG") ;;
+            o) bazel_opts+=("$OPTARG") ;;
+            d) debug=true ;;
+            m) merge=true ;;
+            w) ws="$OPTARG" ;;
+            R) replacements+=("$OPTARG") ;;
+            h|?) echo "$usage"; exit 0 ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+    targets=("${@:-//...}")
+
+    ws="$(cd "$ws" 2>/dev/null && pwd)" || { echo "错误: workspace不存在: $ws"; exit 1; }
+    [[ -f "$ws/MODULE.bazel" || -f "$ws/WORKSPACE" || -f "$ws/WORKSPACE.bazel" ]] || { echo "错误: $ws 不是bazel项目"; exit 1; }
+
+    local aquery_expr="" expr=""
+    for t in "${targets[@]}"; do
+        if [[ "$t" == *... ]]; then
+            expr="$t"
+        else
+            expr="deps($t)"
+        fi
+        if [[ -z "$aquery_expr" ]]; then
+            aquery_expr="$expr"
+        else
+            aquery_expr="$aquery_expr + $expr"
+        fi
+    done
+    aquery_expr="mnemonic(\"CppCompile\", $aquery_expr)"
+
+    local tmpfile="/tmp/aquery_$$.json"
+    echo ">> [1/4] bazel aquery (targets: ${targets[*]})..."
+    (cd "$ws" && bazel aquery "$aquery_expr" "${configs[@]}" "${bazel_opts[@]}" --output=jsonproto > "$tmpfile") || { echo "aquery 失败"; rm -f "$tmpfile"; exit 1; }
+
+    local execroot output_base
+    eval "$(cd "$ws" && bazel info execution_root output_base 2>/dev/null | sed 's/: /=/' | sed 's/^execution_root/execroot/')"
+    echo "   execroot=$execroot"
+
+    echo ">> [2/4] 补全 external 软链接..."
+    if [[ -d "$execroot/external" ]]; then
+        (cd "$execroot/external" && \
+          for d in "$output_base"/external/*; do
+            [[ -e "$d" || -L "$d" ]] || continue
+            local name=$(basename "$d")
+            [[ "$name" == @* ]] && continue
+            [[ -e "$name" || -L "$name" ]] || ln -sfn "$d" "$name"
+          done
+        )
+    fi
+
+    echo ">> [3/4] 确保生成文件可被clangd访问..."
+    [[ -L "$ws/bazel-out" || -d "$ws/bazel-out" ]] || ln -sfn "$execroot/bazel-out" "$ws/bazel-out" 2>/dev/null
+    local output="$ws/compile_commands.json"
+    ln -sfn "$output" "$execroot/compile_commands.json" 2>/dev/null
+
+    echo ">> [4/4] 生成 compile_commands.json..."
+    python3 -c '
+import json,sys,os
+aquery_file,execroot,output_file = sys.argv[1],sys.argv[2],sys.argv[3]
+effort,debug,merge = int(sys.argv[4]),sys.argv[5]=="true",sys.argv[6]=="true"
+replacements = [(r.split("=",1)[0],r.split("=",1)[1]) for r in sys.argv[7:]] if len(sys.argv)>7 else []
+aq = json.load(open(aquery_file))
+new_entries = {}
+for a in aq.get("actions",[]):
+    if a.get("mnemonic")!="CppCompile": continue
+    args = a.get("arguments",[])
+    src = next((args[i+1] for i,x in enumerate(args) if x=="-c" and i+1<len(args)),None)
+    if not src: continue
+    clean = []
+    for arg in args:
+        r = arg
+        for k,v in replacements:
+            if r==k: r=v; break
+            elif k in r: r=r.replace(k,v)
+        if r: clean.append(r)
+    new_entries[src] = {"file":src,"arguments":clean,"directory":execroot}
+
+if effort > 0:
+    import glob
+    def _stem(p): return os.path.basename(p).split(".",1)[0]
+    source_stems_by_dir = {}
+    source_dirs = set()
+    for src in new_entries:
+        d = os.path.dirname(src)
+        source_stems_by_dir.setdefault(d,set()).add(_stem(src))
+        source_dirs.add(d)
+
+    dir_headers_cache = {}
+    HEADER_EXTS = (".h",".hpp",".hh",".hxx")
+    def scan_dir(abs_d):
+        real = os.path.realpath(abs_d)
+        if real in dir_headers_cache: return dir_headers_cache[real]
+        hs = []
+        seen_real = set()
+        for root,dirs,files in os.walk(abs_d,followlinks=True):
+            rr = os.path.realpath(root)
+            if rr in seen_real: dirs[:] = []; continue
+            seen_real.add(rr)
+            dirs[:] = [x for x in dirs if x not in (".git",".cache","node_modules","external","bazel-out")]
+            for f in files:
+                if f.endswith(HEADER_EXTS):
+                    h = os.path.join(root,f)
+                    rel = os.path.relpath(h,execroot)
+                    hs.append((rel, os.path.dirname(rel), f.rsplit(".",1)[0]))
+        dir_headers_cache[real] = hs
+        return hs
+
+    header_entries = {}
+    skipped_sibling = 0
+    skipped_list = []
+    dir_best_cmd = {}
+    for src, entry in new_entries.items():
+        args = entry["arguments"]
+        inc_dirs = []
+        for i,a in enumerate(args):
+            if a in ("-I","-isystem","-iquote") and i+1<len(args):
+                inc_dirs.append(args[i+1])
+            elif a.startswith(("-isystem=","-iquote=")):
+                inc_dirs.append(a.split("=",1)[1])
+            elif a.startswith("-I") and len(a)>2:
+                inc_dirs.append(a[2:])
+        for d in inc_dirs:
+            if not d: continue
+            d = "." if d in (".","./") else d
+            abs_d = d if os.path.isabs(d) else os.path.join(execroot,d)
+            if not os.path.isdir(abs_d): continue
+            spec = len([p for p in d.split("/") if p]) if d != "." else 0
+            prev = dir_best_cmd.get(abs_d)
+            if prev is None or prev[0] < spec:
+                dir_best_cmd[abs_d] = (spec, args)
+
+    for abs_d,(spec,args) in dir_best_cmd.items():
+        for rel, hdir, hstem in scan_dir(abs_d):
+            is_ext = "/external/" in rel or rel.startswith("external/") or rel.startswith("bazel-out/")
+            if is_ext and effort < 2: continue
+            if rel in new_entries: continue
+            if hdir in source_dirs:
+                skipped_sibling += 1
+                if debug: skipped_list.append(rel)
+                continue
+            prev = header_entries.get(rel)
+            if prev and prev["_spec"] >= spec: continue
+            new_args = list(args)
+            for i,x in enumerate(new_args):
+                if x=="-c" and i+1<len(new_args):
+                    new_args[i+1] = rel; break
+            header_entries[rel] = {"file":rel,"arguments":new_args,"directory":execroot,"_spec":spec}
+    for v in header_entries.values(): v.pop("_spec",None)
+    for k,v in header_entries.items(): new_entries.setdefault(k,v)
+    print(f"  + {len(header_entries)} orphan-header entries (skipped {skipped_sibling} headers with sibling source)")
+    if debug:
+        print(f"  [debug] orphan headers ({len(header_entries)}):")
+        for k in sorted(header_entries): print(f"    {k}")
+        print(f"  [debug] skipped (sibling source) headers ({len(skipped_list)}):")
+        for k in sorted(skipped_list): print(f"    {k}")
+
+if merge and os.path.exists(output_file):
+    by_file = {e["file"]:e for e in json.load(open(output_file))}
+    old_keys = set(by_file)
+    by_file.update(new_entries)
+    final = [e for f,e in by_file.items() if os.path.exists(os.path.join(e["directory"],f))]
+    pruned = len(by_file)-len(final)
+    added = len(set(new_entries)-old_keys)
+    print(f"merge: +{added} new, ~{len(new_entries)-added} updated, -{pruned} pruned, {len(final)} total -> {output_file}")
+else:
+    final = list(new_entries.values())
+    print(f"{len(final)} entries -> {output_file}")
+json.dump(final,open(output_file,"w"),separators=(",",":"))
+' "$tmpfile" "$execroot" "$output" "$effort" "$debug" "$merge" "${replacements[@]}"
+
+    rm -f "$tmpfile"
+
+    local empty_trees=()
+    while IFS= read -r inc_dir; do
+        [[ -d "$execroot/$inc_dir" ]] || continue
+        [[ "$inc_dir" == *"/external/"* ]] || continue
+        if [[ -z "$(find "$execroot/$inc_dir" -maxdepth 1 -type f 2>/dev/null | head -1)" && \
+              -z "$(find "$execroot/$inc_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -1)" ]]; then
+            empty_trees+=("$inc_dir")
+        fi
+    done < <(python3 -c '
+import json,sys
+cc=json.load(open(sys.argv[1]))
+seen=set()
+for e in cc:
+    for i,a in enumerate(e["arguments"]):
+        if a in ("-isystem","-I") and i+1<len(e["arguments"]):
+            d=e["arguments"][i+1]
+            if d not in seen:
+                seen.add(d)
+                print(d)
+' "$output")
+    if (( ${#empty_trees[@]} )); then
+        echo ""
+        echo "⚠ 以下include目录为空(disk_cache致tree artifact未恢复):"
+        printf "    %s\n" "${empty_trees[@]}"
+        echo "  尝试: bazel build <target> --disk_cache=\"\""
+    fi
+}
+
+main "$@"
