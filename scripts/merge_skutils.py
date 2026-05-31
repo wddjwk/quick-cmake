@@ -121,7 +121,7 @@ def main():
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding='utf-8') as f:
         # File header
         f.write("/// @file skutils.h\n")
         f.write("/// @brief Single header-only library merging printer, logger, and all dependencies.\n")
