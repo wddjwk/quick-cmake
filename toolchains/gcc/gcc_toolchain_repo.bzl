@@ -130,6 +130,19 @@ def _try_gcc(rctx, path):
 _MINGW_ENVS = ["mingw64", "ucrt64", "mingw32"]
 
 def _gcc_toolchain_repo_impl(rctx):
+    # On non-Windows platforms, generate stub files — this toolchain
+    # is only meaningful on Windows/MinGW.
+    if "windows" not in rctx.os.name.lower():
+        rctx.file("BUILD.bazel", "# Stub: MinGW toolchain not available on this platform.\n")
+        rctx.file("gcc_info.bzl", _GCC_INFO_BZL.format(
+            version = "0",
+            target = "unavailable",
+            mingw_root = "",
+            tool_paths = "",
+            include_dirs = "",
+        ))
+        return
+
     # --- Locate GCC executable ---
     # Priority: explicit gcc_path > explicit mingw_root > PATH > BAZEL_SH
     gcc = None
@@ -151,11 +164,15 @@ def _gcc_toolchain_repo_impl(rctx):
                 rctx.attr.mingw_root,
             ))
 
-    # 3. Search PATH
+    # 3. Search PATH (only accept MinGW-targeting GCC)
     if not gcc:
         found = rctx.which("gcc")
         if found:
-            gcc = _try_gcc(rctx, str(found))
+            candidate = _try_gcc(rctx, str(found))
+            if candidate:
+                res = rctx.execute([candidate, "-dumpmachine"])
+                if res.return_code == 0 and "mingw" in res.stdout.strip():
+                    gcc = candidate
 
     # 4. Derive from BAZEL_SH  (e.g. D:/env/msys2/usr/bin/bash.exe)
     if not gcc:

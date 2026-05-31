@@ -7,6 +7,9 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "tbb",
-    linkopts = ["-ltbb12"],
+    linkopts = select({
+        "//toolchains/gcc:msys2": ["-ltbb12"],
+        "//conditions:default": ["-ltbb"],
+    }),
     visibility = ["//visibility:public"],
 )

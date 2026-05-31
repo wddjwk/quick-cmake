@@ -1,3 +1,7 @@
 build
 .cache
 .git
+bazel-bin
+bazel-out
+bazel-quick-cmake
+bazel-testlogs
