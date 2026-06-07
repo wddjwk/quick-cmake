@@ -64,7 +64,7 @@ int main() {
   DUMP(*pstr, pstr, &pstr);
   DUMP(**pstrarr, *pstrarr, pstrarr, &pstrarr)
   DUMP(*pint, pint, &pint);
-  DUMP(*lambda_func, lambda_func, &lambda_func);
+  DUMP(lambda_func, &lambda_func);
 
   // Bug fix #1: nullptr safety
   LINE_BREAKER("Nullptr Test");
