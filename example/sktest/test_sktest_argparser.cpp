@@ -16,9 +16,11 @@ int main() {  // NOLINT
     .add_arg({.name = "error", .type = ag::ArgType::STR, .help = "Skipped Value"});
 
   int argc = 14;
-  char* argv[] = {"filename", "default_val", "-o",           "false_outname", "-o  =true_outname ",
-                  "--path",   " path1  ",    "path space 2", "--path ",       "dir/path3",
-                  "-i",       "123",         "-bool",        "unparsed",      "out_range"};
+  const char* argv_raw[] = {"filename", "default_val", "-o",           "false_outname", "-o  =true_outname ",
+                            "--path",   " path1  ",    "path space 2", "--path ",       "dir/path3",
+                            "-i",       "123",         "-bool",        "unparsed",      "out_range"};
+  char* argv[14];
+  for (int i = 0; i < argc; ++i) argv[i] = const_cast<char*>(argv_raw[i]);
 
   parser.parse(argc, argv);
 

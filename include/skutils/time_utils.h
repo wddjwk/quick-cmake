@@ -23,8 +23,13 @@ inline std::string current(const char *format = "%Y-%m-%d %H:%M:%S") {
 template <typename Func, typename... Args>
 auto cal_func_time(Func &&f, Args &&...args) {
   auto start = std::chrono::system_clock::now();
-  // refer to benchmark::DoNotOptimize
-  asm volatile("" : : "r,m"(std::invoke(std::forward<Func>(f), std::forward<Args>(args)...)) : "memory");
+  auto result = std::invoke(std::forward<Func>(f), std::forward<Args>(args)...);
+  // Prevent the compiler from optimizing away the result
+#if defined(_MSC_VER)
+  _ReadWriteBarrier();
+#else
+  asm volatile("" : : "r,m"(result) : "memory");
+#endif
   auto end = std::chrono::system_clock::now();
   auto cnt = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   return cnt;

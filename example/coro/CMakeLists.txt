@@ -39,7 +39,9 @@ if(NOT TARGET asio::asio)
 endif()
 
 # ── concurrencpp — a modern C++20 coroutine library for comparison ──
-if(NOT TARGET concurrencpp::concurrencpp)
+# NOTE: concurrencpp v0.1.7 does not compile with newer MSVC (missing
+# <string>/<chrono> includes in its headers). Skip on MSVC.
+if(NOT MSVC AND NOT TARGET concurrencpp::concurrencpp)
     FetchContent_Declare(
         concurrencpp
         GIT_REPOSITORY https://github.com/David-Haim/concurrencpp.git

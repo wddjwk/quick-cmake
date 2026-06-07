@@ -437,7 +437,7 @@ struct StackLike<T, std::void_t<typename T::value_type, decltype(std::declval<T>
                                 decltype(std::declval<T>().top()), decltype(std::declval<T>().empty())>>
   : std::conjunction<std::is_same<decltype(std::declval<T>().pop()), void>,
                      std::is_same<decltype(std::declval<T>().push(std::declval<typename T::value_type>())), void>,
-                     std::is_same<decltype(std::declval<T>().top()), typename T::value_type>,
+                     std::is_convertible<decltype(std::declval<T>().top()), typename T::value_type>,
                      std::is_same<decltype(std::declval<T>().empty()), bool>> {};
 
 // 当然，仍然可以使用嵌套 enable_if 的方式来做，看起来似乎更简洁

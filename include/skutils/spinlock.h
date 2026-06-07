@@ -12,7 +12,7 @@ class SpinLock : public NonCopyable {
   std::atomic_flag flag;
 
   public:
-  SpinLock() : flag{false} {}
+  SpinLock() = default;
 
   void lock() {
     while (flag.test_and_set(std::memory_order_acquire)) {}

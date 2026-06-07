@@ -63,7 +63,7 @@ class SpinLock : public NonCopyable {
   std::atomic_flag flag;
 
   public:
-  SpinLock() : flag{false} {}
+  SpinLock() = default;
 
   void lock() {
     while (flag.test_and_set(std::memory_order_acquire)) {}
@@ -340,8 +340,13 @@ inline std::string current(const char *format = "%Y-%m-%d %H:%M:%S") {
 template <typename Func, typename... Args>
 auto cal_func_time(Func &&f, Args &&...args) {
   auto start = std::chrono::system_clock::now();
-  // refer to benchmark::DoNotOptimize
-  asm volatile("" : : "r,m"(std::invoke(std::forward<Func>(f), std::forward<Args>(args)...)) : "memory");
+  auto result = std::invoke(std::forward<Func>(f), std::forward<Args>(args)...);
+  // Prevent the compiler from optimizing away the result
+#if defined(_MSC_VER)
+  _ReadWriteBarrier();
+#else
+  asm volatile("" : : "r,m"(result) : "memory");
+#endif
   auto end = std::chrono::system_clock::now();
   auto cnt = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   return cnt;
@@ -773,7 +778,7 @@ struct StackLike<T, std::void_t<typename T::value_type, decltype(std::declval<T>
                                 decltype(std::declval<T>().top()), decltype(std::declval<T>().empty())>>
   : std::conjunction<std::is_same<decltype(std::declval<T>().pop()), void>,
                      std::is_same<decltype(std::declval<T>().push(std::declval<typename T::value_type>())), void>,
-                     std::is_same<decltype(std::declval<T>().top()), typename T::value_type>,
+                     std::is_convertible<decltype(std::declval<T>().top()), typename T::value_type>,
                      std::is_same<decltype(std::declval<T>().empty()), bool>> {};
 
 // 当然，仍然可以使用嵌套 enable_if 的方式来做，看起来似乎更简洁

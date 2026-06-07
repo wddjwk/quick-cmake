@@ -23,3 +23,4 @@ external
 MODULE.bazel.lock
 
 compile_commands.json
+.clangd

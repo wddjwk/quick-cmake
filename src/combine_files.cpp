@@ -2,7 +2,6 @@
 #include <filesystem>
 #include <fstream>
 #include <set>
-#include <stop_token>
 #include <string>
 #include <system_error>
 

@@ -34,9 +34,18 @@ set(SKUTILS_MERGE_INPUTS
     ${INCLUDE_DIR}/skutils/logger.h
 )
 
+if(MSVC)
+  find_program(PYTHON_EXECUTABLE NAMES python python3)
+else()
+  find_program(PYTHON_EXECUTABLE NAMES python3 python)
+endif()
+if(NOT PYTHON_EXECUTABLE)
+  set(PYTHON_EXECUTABLE "python3")
+endif()
+
 add_custom_command(
     OUTPUT ${SKUTILS_SINGLE_HEADER}
-    COMMAND python3 ${MERGE_SCRIPT} ${SKUTILS_SINGLE_HEADER} ${SKUTILS_MERGE_INPUTS}
+    COMMAND ${PYTHON_EXECUTABLE} ${MERGE_SCRIPT} ${SKUTILS_SINGLE_HEADER} ${SKUTILS_MERGE_INPUTS}
     DEPENDS ${MERGE_SCRIPT} ${SKUTILS_MERGE_INPUTS}
     COMMENT "Generating single-header skutils.h -> include/header_only/skutils.h"
 )
@@ -53,11 +62,19 @@ include(${CMAKE_SOURCE_DIR}/cmake/tools.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/library.cmake)
 
 # CXX相关设置
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+if(MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w /Zc:preprocessor /Zc:__cplusplus /utf-8")
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+endif()
 
 option(WERROR "if -Werror" OFF)
 if(WERROR)
+  if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+  else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+  endif()
 endif()
 
 option(BUILD_WITH_COVERAGE "Enable coverage reporting using gcov" OFF)
